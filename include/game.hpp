@@ -45,7 +45,7 @@ public:
     FIELD(0x06F8, bool, isHalloween);
     FIELD(0x0420, DayNightCycle*, daynightCycle);
     FIELD(0x08D8, GameInst*, gameInstance);
-
+    
     // Player state fields
     FIELD(0x0BB4, float, sleepTime);
     FIELD(0x0760, bool, hasVirus);
@@ -111,6 +111,7 @@ public:
     FIELD(0x0BC1, bool, hasGlasses);
     FIELD(0x0BC2, bool, hasFlashlight);
     FIELD(0x0B80, GameMode*, gameMode);
+    FIELD(0x06D0, AActor*, pickup_actor);
 
     // Convenient struct wrapper
     struct PlayerState {
@@ -195,8 +196,6 @@ public:
     ENUM_FIELD(0x01E1, GameModes::Type, gamemodeType);
     // 0x01E2 - 0x01E3 is padding (2 bytes)
     FIELD(0x01E4, int32_t, startDay);
-    FIELD(0x01F8, RC::Unreal::TArray<RC::Unreal::FString>, radios_tit);
-    FIELD(0x0208, RC::Unreal::TArray<float>, vols);
     FIELD(0x0228, bool, isSaveReset);
     FIELD(0x0229, bool, loadObjects);
     // 0x022A - 0x022F is padding (6 bytes)
@@ -205,9 +204,7 @@ public:
     FIELD(0x0264, bool, antibreatherKickout);
     // 0x0265 - 0x0267 is padding (3 bytes)
     FIELD(0x0268, RC::Unreal::FString, dwString);
-    FIELD(0x0278, RC::Unreal::TArray<RC::Unreal::FString>, dwList);
     FIELD(0x0288, RC::Unreal::FString, dwString_2);
-    FIELD(0x0298, RC::Unreal::TArray<RC::Unreal::FString>, dwList_0);
     FIELD(0x02A8, GameMode*, gamemode_);
     FIELD(0x02B0, bool, NewVar_0);
     
