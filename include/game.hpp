@@ -20,6 +20,7 @@ class SaveSlot;
 class DayNightCycle;
 class GameInst;
 class GameMode;
+class Hook;
 
 // Game Modes enum
 namespace GameModes {
@@ -35,6 +36,15 @@ namespace GameModes {
         Max = 8
     };
 }
+
+struct WeaponStruct {
+    FIELD(0x0008, float, damage);                         // Base weapon damage
+    FIELD(0x000C, float, reload);                         // Reload time in seconds
+    FIELD(0x0010, float, length);                         // Weapon length/range
+    FIELD(0x0014, float, force);                          // Impact force
+    FIELD(0x0018, bool, attack);                          // Attack state
+    
+};
 
 // Main Game Mode class
 class GameMode : public RC::Unreal::AGameMode {
@@ -103,7 +113,6 @@ public:
     FIELD(0x08BC, bool, crouching);
     FIELD(0x0978, bool, dead);
     FIELD(0x0A24, float, air);
-    FIELD(0x0A48, bool, wakingUp);
     FIELD(0x0A80, float, foodDrain);
     FIELD(0x0A84, float, sleepDrain);
     FIELD(0x0A90, bool, mirror);
@@ -112,6 +121,70 @@ public:
     FIELD(0x0BC2, bool, hasFlashlight);
     FIELD(0x0B80, GameMode*, gameMode);
     FIELD(0x06D0, AActor*, pickup_actor);
+    FIELD(0x0920, AActor*, holdObject);
+    FIELD(0x0928, Hook*, activeHook);
+    FIELD(0x0958, AActor*, droppedItem);
+    FIELD(0x0980, AActor*, sittingOn);
+    FIELD(0x0988, UObject*, sitOnComponent); // Base UObject for sit stuff until implemented
+    FIELD(0x0990, UObject*, sitPlace);
+    FIELD(0x09A0, AActor*, lookAtActor);
+
+    FIELD(0x06EC, float, animTimer);
+    FIELD(0x06F0, float, defSpeed);
+    FIELD(0x06F1, bool, input_run);
+    FIELD(0x0719, bool, input_alt);
+    FIELD(0x0720, float, armLength);
+    FIELD(0x0739, bool, flashlight);
+    FIELD(0x0749, bool, isLookAt);
+    FIELD(0x0750, float, mouseSens);
+    FIELD(0x0754, float, inpF_forward);
+    FIELD(0x0758, float, inpF_back);
+    FIELD(0x075C, float, inpF_rig);
+    FIELD(0x0760, float, inpF_lef);
+    FIELD(0x0761, bool, input_rotate);
+    FIELD(0x0774, float, camSpeed);
+    FIELD(0x0775, bool, grabsHeavy);
+    FIELD(0x0776, bool, s_invertX);
+    FIELD(0x0777, bool, s_invertY);
+    FIELD(0x077C, float, kickTime);
+    FIELD(0x077D, bool, isKicked);
+    FIELD(0x077E, bool, canKick);
+    FIELD(0x0780, bool, isRagdoll);
+    FIELD(0x0821, bool, hulkMode);
+    FIELD(0x0831, bool, arcade);
+    FIELD(0x08A2, bool, input_jump);
+    FIELD(0x08B9, bool, onWater);
+    FIELD(0x091C, float, reload);
+    FIELD(0x091D, bool, input_fire);
+    FIELD(0x08BD, bool, input_crouch);
+    FIELD(0x0938, RC::Unreal::FName, holdName);
+    FIELD(0x0918, WeaponStruct, weapon);
+    FIELD(0x09C8, float, burningTime);
+    FIELD(0x09F9, bool, deactivateMouseInput);
+    FIELD(0x0A21, bool, fallTp);
+    FIELD(0x0A2C, float, underwaterDepth);
+    FIELD(0x0A49, bool, isWakingUp);
+    FIELD(0x0A4A, bool, skipTolerance);
+    FIELD(0x0A4B, bool, isInFPBanimation);
+    FIELD(0x0A50, float, headbobAnim);
+    FIELD(0x0A54, float, headbobStrength);
+    FIELD(0x0A58, float, headbobTiltStrength);
+    FIELD(0x0A69, bool, noWakeup);
+    FIELD(0x0A88, float, sleepDraining);
+    FIELD(0x0A8C, float, agil);
+    FIELD(0x0A91, bool, isMirror);
+    FIELD(0x0A92, bool, dropped);
+    FIELD(0x0AA1, bool, radialMenu);
+    FIELD(0x0AC1, bool, scubaAir);
+    FIELD(0x0B59, bool, lastDroppedItem_deleted);
+    FIELD(0x0B5A, bool, canGetUp);
+    FIELD(0x0B60, float, grab_speed);
+    FIELD(0x0B6C, bool, AutoRagdollGetup);
+    FIELD(0x0B79, bool, calClimb);
+    FIELD(0x0BA1, bool, deactivateHeightRagdoll);
+    FIELD(0x0BC4, bool, velmaMode);
+    FIELD(0x0BC5, bool, crankFlashlight);
+
 
     // Convenient struct wrapper
     struct PlayerState {
@@ -138,7 +211,7 @@ public:
             this->crouching,
             this->dead,
             this->air,
-            this->wakingUp,
+            this->isWakingUp,
             this->foodDrain,
             this->sleepDrain,
             this->mirror,
@@ -149,6 +222,20 @@ public:
     }
 };
 
+class Hook : public RC::Unreal::AActor
+{
+    FIELD(0x0290, float, dist);
+    FIELD(0x0294, bool, attached_a);
+    FIELD(0x0295, bool, attached_b);
+    FIELD(0x0298, UObject*, component_A);
+    FIELD(0x02A0, UObject*, component_B);
+    FIELD(0x02A8, bool, isThrown);
+    FIELD(0x02B8, UObject*, phys);
+    FIELD(0x02C0, float, maxDist);
+    FIELD(0x02D0, bool, dontDrop);
+    FIELD(0x02D4, float, tensionLinear);
+};
+
 // Car (ATV) class
 class Car : public RC::Unreal::AActor {
 public:
@@ -157,6 +244,37 @@ public:
     FIELD(0x0481, bool, broken);
     FIELD(0x047C, float, health);
     FIELD(0x04C8, bool, underwater);
+    FIELD(0x0441, bool, input_forward);
+    FIELD(0x0442, bool, input_back);
+    FIELD(0x0443, bool, input_right);
+    FIELD(0x0444, bool, input_left);
+    FIELD(0x0450, MainPlayer*, pl);
+    FIELD(0x0454, float, rotAlpha);
+    FIELD(0x0458, float, torqAlpha);
+    FIELD(0x045C, float, Speed);
+    FIELD(0x0469, bool, IsDrive);
+    FIELD(0x046A, bool, isDrive_sound);
+    FIELD(0x046B, bool, turbo);
+    FIELD(0x0471, bool, Empty);
+    FIELD(0x0472, bool, Brake);
+    FIELD(0x0478, float, diff_fuel);
+    FIELD(0x0479, bool, lights);
+    FIELD(0x0482, bool, brokenn);
+    FIELD(0x0483, bool, input_alt);
+    FIELD(0x0488, float, speed_turbo);
+    FIELD(0x048C, float, speed_default);
+    FIELD(0x048D, bool, nitro);
+    FIELD(0x048E, bool, invX);
+    FIELD(0x048F, bool, invY);
+    FIELD(0x0490, bool, isDriven);
+    FIELD(0x04E1, bool, inWater);
+    FIELD(0x04E2, bool, floater);
+    FIELD(0x04E3, bool, trap);
+    FIELD(0x0509, bool, zapped);
+    FIELD(0x0510, float, airtime);
+    FIELD(0x0511, bool, IsInAir);
+    FIELD(0x0512, bool, landed);
+    FIELD(0x0520, GameMode*, gameMode);
     
     bool hasFuel() const { return fuel > 0.0f; }
 };
