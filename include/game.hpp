@@ -46,6 +46,31 @@ struct WeaponStruct {
     
 };
 
+struct PropStruct {
+    //FIELD(0x0000, class UStaticMesh*, mesh);                    
+    FIELD(0x0008, RC::Unreal::FText, displayName);             
+    FIELD(0x0020, RC::Unreal::FText, description);             
+    //ENUM_FIELD(0x0038, enum_spawnmenuCats::Type, category);    
+    // 0x0039 - 0x003B is padding (3 bytes)
+    FIELD(0x003C, float, massMultiply);                       
+    FIELD(0x0040, bool, canPickup);                            
+    FIELD(0x0041, bool, heavy);                                
+    FIELD(0x0042, bool, ignoreInteractions);                   
+    FIELD(0x0043, bool, staticInteract);                      
+    FIELD(0x0044, float, dragForce);                          
+    FIELD(0x0048, int32_t, price);                            
+    FIELD(0x004C, RC::Unreal::FName, achievementUnlock);      
+    FIELD(0x0054, bool, hidden);                              
+    // 0x0055 - 0x0057 is padding (3 bytes)
+    //FIELD(0x0058, TSubclassOf<class AActor>, spawnAsObject);  
+    FIELD(0x0060, bool, spoiler);                             
+    // 0x0061 - 0x0067 is padding (7 bytes)
+    FIELD(0x0068, RC::Unreal::FString, craftTag);             
+    FIELD(0x0078, float, volumeMultiply);                     
+    FIELD(0x007C, bool, parseNameToObject);                   
+    FIELD(0x007D, bool, canCollect);                          
+}; // Size: 0x7E
+
 // Main Game Mode class
 class GameMode : public RC::Unreal::AGameMode {
 public:
@@ -290,10 +315,18 @@ public:
 // Base prop class
 class Prop : public RC::Unreal::AActor {
 public:
-    FIELD(0x02D0, bool, isStatic);
-    FIELD(0x02D2, bool, frozen);
-    FIELD(0x02D3, bool, ignoreSave);
-    FIELD(0x02D8, RC::Unreal::FString, key);
+    FIELD(0x0248, GameMode*, gameMode);
+    FIELD(0x0250, RC::Unreal::FName, Name);
+    FIELD(0x02D0, PropStruct, propData);
+    FIELD(0x02D1, bool, Static);
+    FIELD(0x02D2, bool, removeWOrespawn);
+    FIELD(0x02D3, bool, frozen);
+    FIELD(0x02D4, bool, ignoreSav);
+    FIELD(0x02D5, bool, ingoreFix);
+    FIELD(0x02D6, bool, sleep);
+    FIELD(0x0311, bool, customShadows);
+    FIELD(0x0341, bool, returnLookAt);
+    FIELD(0x0342, bool, doCastShadow);
 };
 
 // Door class 
