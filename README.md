@@ -284,6 +284,8 @@ void HandleTimeChange(DayNightCycle* dnc) {
 
 See [UE4SS Dumpers](https://docs.ue4ss.com/dev/feature-overview/dumpers.html#c-header-generator)
 
+See [UE4SS Dumper Converter](https://github.com/modestimpala/RE-UE4SS/blob/main/DumpConverter.md)
+
 Make sure DumpOffsetsAndSizes and LoadAllAssetsBeforeGeneratingCXXHeaders are 1 then dump headers from main menu.
 
 Find specific class, then map offsets:
