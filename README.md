@@ -33,7 +33,7 @@ A modern C++ header-only library for interacting with Voices of the Void game st
 ## Prerequisites
 
 - CMake 3.18 or higher
-- UE4SS C++ Dev Environment Setup
+- [UE4SS C++ Dev Environment Setup](https://github.com/modestimpala/RE-UE4SS)
 
 ## Version Compatibility ⚠️
 
