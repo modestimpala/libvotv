@@ -101,7 +101,20 @@ if (player->inWater && player->air < 50.0f) {
 
 ### ObjectLifetimeTracker
 
-The `ObjectLifetimeTracker` provides safe UObject lifetime tracking:
+The `ObjectLifetimeTracker` provides safe UObject lifetime tracking.
+
+Initialize the ObjectLifetimeTracker as early as possible in your mod lifecycle:
+
+```cpp
+auto on_unreal_init() -> void override
+    auto& tracker = ObjectLifetimeTracker::Get(); // Get instance early
+    // Rest of initialization...
+}
+```
+
+Early initialization ensures no objects created during startup are missed by the tracking system.
+
+Example:
 
 ```cpp
 #include <ObjectLifetimeTracker.hpp>
