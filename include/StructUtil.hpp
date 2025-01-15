@@ -72,6 +72,23 @@ struct FIntVector {
     FIntVector& operator=(FIntVector&&) noexcept = default;
 };
 
+struct FIntVector2D {
+    int32_t X;
+    int32_t Y;
+
+    /// Default constructor initializes to (0,0)
+    FIntVector2D() noexcept : X(0), Y(0) {}
+    
+    /// Construct vector from x,y components
+    FIntVector2D(int32_t InX, int32_t InY) noexcept : X(InX), Y(InY) {}
+    
+    // Prevent any accidental heap allocations
+    FIntVector2D(const FIntVector2D&) noexcept = default;
+    FIntVector2D& operator=(const FIntVector2D&) noexcept = default;
+    FIntVector2D(FIntVector2D&&) noexcept = default;
+    FIntVector2D& operator=(FIntVector2D&&) noexcept = default;
+};
+
 // Simple compile-time checks
 #define VALIDATE_OFFSET(OFFSET) \
     static_assert((OFFSET) >= 0, "Offset must be non-negative"); \
@@ -114,6 +131,37 @@ struct FIntVector {
         return ((FIntVector*)((char*)this + OFFSET))->Z;             \
     }                                                                \
     __declspec(property(get = get_##NAME, put = set_##NAME)) FIntVector NAME
+
+#define VECTOR_INT2D_FIELD(OFFSET, NAME)                                   \
+    VALIDATE_OFFSET(OFFSET)                                              \
+    void set_##NAME(const FIntVector2D& value) noexcept                   \
+    {                                                                    \
+        auto vec = (FIntVector2D*)((char*)this + OFFSET);                \
+        *vec = value;                                                   \
+    }                                                                   \
+                                                                        \
+    void set_##NAME(int32_t x, int32_t y) noexcept                      \
+    {                                                                   \
+        auto vec = (FIntVector2D*)((char*)this + OFFSET);               \
+        vec->X = x;                                                    \
+        vec->Y = y;                                                    \
+    }                                                                  \
+                                                                       \
+    const FIntVector2D& get_##NAME() const noexcept                     \
+    {                                                                  \
+        return *((FIntVector2D*)((char*)this + OFFSET));               \
+    }                                                                 \
+                                                                      \
+    int32_t get_##NAME##_x() const noexcept                          \
+    {                                                                 \
+        return ((FIntVector2D*)((char*)this + OFFSET))->X;            \
+    }                                                                \
+                                                                     \
+    int32_t get_##NAME##_y() const noexcept                         \
+    {                                                                \
+        return ((FIntVector2D*)((char*)this + OFFSET))->Y;            \
+    }                                                                \
+    __declspec(property(get = get_##NAME, put = set_##NAME)) FIntVector2D NAME
 
 #define FIELD(OFFSET, TYPE, NAME)                                                \
     VALIDATE_OFFSET(OFFSET)                                                     \
