@@ -18,6 +18,11 @@ A modern C++ header-only library for interacting with Voices of the Void game st
 - 📡 Object lifetime tracking utilities
 - 🔧 Struct manipulation macros for clean field access of custom fields
 
+### Todo
+
+- Adjust macros to use native UE4SS functions for version-agnostic property manipulation
+- Map VotV specific functions with same method 
+
 ## Table of Contents
 
 - [Prerequisites](#prerequisites)
