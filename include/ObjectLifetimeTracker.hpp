@@ -144,6 +144,107 @@ public:
         RC::Output::send<RC::LogLevel::Verbose>(STR("Cleared all object tracking\n"));
     }
 
+    /// Explicitly track a specific UObject instance
+    /// @param object The UObject pointer to track
+    /// @return true if the object was successfully added to tracking
+    bool TrackSpecificObject(const RC::Unreal::UObjectBase* object) {
+        if (!object) {
+            RC::Output::send<RC::LogLevel::Warning>(STR("Attempted to track null object pointer\n"));
+            return false;
+        }
+
+        auto uobject = std::bit_cast<RC::Unreal::UObject*>(object);
+        if (!uobject) {
+            RC::Output::send<RC::LogLevel::Warning>(STR("Failed to cast object for tracking\n"));
+            return false;
+        }
+
+        // Check if object is already being destroyed
+        auto flags = uobject->GetObjectFlags();
+        if (flags & RC::Unreal::EObjectFlags::RF_BeginDestroyed) {
+            RC::Output::send<RC::LogLevel::Warning>(STR("Attempted to track object that is pending destruction\n"));
+            return false;
+        }
+
+        std::lock_guard lock(objectsLock);
+        
+        // Check if already tracking
+        if (liveObjects.contains(object)) {
+            return true;  // Already tracking this object
+        }
+
+        ObjectInfo info;
+        info.isValid = true;
+        info.name = uobject->GetName();
+        info.address = reinterpret_cast<uintptr_t>(object);
+        info.flags = flags;
+
+        liveObjects[object] = info;
+        RC::Output::send<RC::LogLevel::Verbose>(STR("Started tracking specific object: {}\n"), 
+            info.name.c_str());
+        return true;
+    }
+
+    
+    /// Find all tracked objects of a specific UClass type
+    /// @param classToFind The UClass to search for
+    /// @return Vector of pairs containing the object pointer and its info
+    std::vector<std::pair<const RC::Unreal::UObjectBase*, ObjectInfo>> FindObjectsByClass(RC::Unreal::UClass* classToFind) {
+        if (!classToFind) {
+            RC::Output::send<RC::LogLevel::Warning>(STR("Attempted to search with null class type\n"));
+            return {};
+        }
+
+        std::vector<std::pair<const RC::Unreal::UObjectBase*, ObjectInfo>> results;
+        std::lock_guard lock(objectsLock);
+
+        for (const auto& [obj, info] : liveObjects) {
+            auto uobject = std::bit_cast<RC::Unreal::UObject*>(obj);
+            if (uobject && uobject->IsA(classToFind)) {
+                results.emplace_back(obj, info);
+            }
+        }
+
+        return results;
+    }
+
+    /// Find all tracked objects whose names contain the specified string
+    /// @param namePattern The string to search for in object names
+    /// @param caseSensitive Whether to perform case-sensitive matching
+    /// @return Vector of pairs containing the object pointer and its info
+    std::vector<std::pair<const RC::Unreal::UObjectBase*, ObjectInfo>> FindObjectsByName(
+        const std::wstring& namePattern, 
+        bool caseSensitive = true
+    ) {
+        if (namePattern.empty()) {
+            RC::Output::send<RC::LogLevel::Warning>(STR("Attempted to search with empty name pattern\n"));
+            return {};
+        }
+
+        std::vector<std::pair<const RC::Unreal::UObjectBase*, ObjectInfo>> results;
+        std::lock_guard lock(objectsLock);
+
+        for (const auto& [obj, info] : liveObjects) {
+            bool matches;
+            if (caseSensitive) {
+                matches = info.name.find(namePattern) != std::wstring::npos;
+            } else {
+                // Convert both strings to lowercase for case-insensitive comparison
+                std::wstring lowerName = info.name;
+                std::wstring lowerPattern = namePattern;
+                std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::towlower);
+                std::transform(lowerPattern.begin(), lowerPattern.end(), lowerPattern.begin(), ::towlower);
+                matches = lowerName.find(lowerPattern) != std::wstring::npos;
+            }
+
+            if (matches) {
+                results.emplace_back(obj, info);
+            }
+        }
+
+        return results;
+    }
+
 private:
     std::unordered_map<const RC::Unreal::UObjectBase*, ObjectInfo> liveObjects;
     std::unordered_set<RC::Unreal::UClass*> trackedTypes;
