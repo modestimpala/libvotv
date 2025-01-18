@@ -20,7 +20,6 @@ A modern C++ header-only library for interacting with Voices of the Void game st
 
 ### Todo
 
-- Adjust macros to use native UE4SS functions for version-agnostic property manipulation
 - Map VotV specific functions with same method 
 
 ## Table of Contents
@@ -39,13 +38,6 @@ A modern C++ header-only library for interacting with Voices of the Void game st
 
 - CMake 3.18 or higher
 - [UE4SS C++ Dev Environment Setup](https://github.com/modestimpala/RE-UE4SS)
-
-## Version Compatibility ⚠️
-
-This library targets Voices of the Void version pa0081_0008. The memory offsets are version-specific:
-- If using a different game version, offsets will need to be updated
-- Current offsets were verified against pa0081_0008
-- Using incorrect offsets can cause crashes or undefined behavior
 
 ## Installation
 
