@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <Unreal/AActor.hpp>
 #include <Unreal/UObject.hpp>
 #include <Unreal/FString.hpp>
@@ -7,13 +7,11 @@
 #include "StructUtil.hpp"
 
 namespace votv::game {
-
-// All offsets are for Voices of the Void version pa0081_0008
-// If you're using a different version, offsets may need to be updated
-#ifndef VOTV_VERSION
-#define VOTV_VERSION "pa0081_0008"
-#endif
-
+    using RC::Unreal::UFunction;
+    using RC::Unreal::FMemory;
+    using RC::Unreal::uint8;
+    using RC::Unreal::FName;
+    namespace UObjectGlobals = RC::Unreal::UObjectGlobals; 
 // Forward declarations
 class MainPlayer;
 class SaveSlot;
@@ -22,7 +20,7 @@ class GameInst;
 class GameMode;
 class Hook;
 
-// Game Modes enum
+// Game Modes enum (pa0081_0008)
 namespace GameModes {
     enum Type {
         Story = 0,
@@ -46,13 +44,13 @@ struct WeaponStruct {
     bool attack;                               // 0x0018 (size: 0x1)
     char padding_1[0x7];                                                              // 0x0019 (size: 0x7)
     char padding_2[0x10];      // TArray<class UPhysicalMaterial*> matEff_21_184D7DC9414F64A7AE914FBDB6ED92DC;      // 0x0020 (size: 0x10)
-    TArray<float> matEffDmg;                      // 0x0030 (size: 0x10)
+    //TArray<float> matEffDmg;                      // 0x0030 (size: 0x10)
 };
 
 struct PropStruct {
      class UStaticMesh* mesh;                     // 0x0000 (size: 0x8)
-     Unreal::FText displayName;                         // 0x0008 (size: 0x18)
-    Unreal::FText description;                     // 0x0020 (size: 0x18)
+     RC::Unreal::FText displayName;                         // 0x0008 (size: 0x18)
+    RC::Unreal::FText description;                     // 0x0020 (size: 0x18)
     char padding[0x1];  //Enum<enum_spawnmenuCats::Type> category_42_B50473484322DA921629D9BE91DB63EC; // 0x0038 (size: 0x1)
     char padding_0[0x3];                                                              // 0x0039 (size: 0x3)
     float massMultiply;                      // 0x003C (size: 0x4)
@@ -61,14 +59,14 @@ struct PropStruct {
     bool ignoreInteractions;                  // 0x0042 (size: 0x1)
     bool staticInteract;                    // 0x0043 (size: 0x1)
     float dragForce;                          // 0x0044 (size: 0x4)
-     Unreal::int32 price;                                 // 0x0048 (size: 0x4)
-    FName achievement_unlock;              // 0x004C (size: 0x8)
+     RC::Unreal::int32 price;                                 // 0x0048 (size: 0x4)
+    RC::Unreal::FName achievement_unlock;              // 0x004C (size: 0x8)
     bool hidden;                                 // 0x0054 (size: 0x1)
     char padding_1[0x3];                                                              // 0x0055 (size: 0x3)
-     Unreal::TSubclassOf<class AActor> spawnAsObject;      // 0x0058 (size: 0x8)
+     RC::Unreal::TSubclassOf<class AActor> spawnAsObject;      // 0x0058 (size: 0x8)
     bool spoiler;                             // 0x0060 (size: 0x1)
     char padding_2[0x7];                                                              // 0x0061 (size: 0x7)
-    FString craftTag;                       // 0x0068 (size: 0x10)
+    RC::Unreal::FString craftTag;                       // 0x0068 (size: 0x10)
     float volumeMultiply;                   // 0x0078 (size: 0x4)
     bool parseNameToObject;               // 0x007C (size: 0x1)
     bool canCollect;                          // 0x007D (size: 0x1)
