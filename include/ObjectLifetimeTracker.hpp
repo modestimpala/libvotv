@@ -70,19 +70,26 @@ public:
     /// @return true if the object is being tracked, valid, and not marked for destruction
     bool IsActorAlive(const RC::Unreal::UObjectBase* actor) {
         if (!actor) return false;
-        
+    
         std::lock_guard lock(objectsLock);
         auto it = liveObjects.find(actor);
         if (it == liveObjects.end()) return false;
 
-        // Cast to UObject to check flags
-        auto uobject = std::bit_cast<RC::Unreal::UObject*>(actor);
-        if (!uobject) return false;
+        // Update info if it's still "pending"
+        if (it->second.name == L"pending") {
+            try {
+                auto uobject = std::bit_cast<RC::Unreal::UObject*>(actor);
+                if (uobject) {
+                    it->second.name = uobject->GetName();
+                    it->second.flags = uobject->GetObjectFlags();
+                }
+            } catch (...) {
+                // If we can't update, just return what we know
+            }
+        }
 
-        // Check for pending kill or invalid flags
-        auto flags = uobject->GetObjectFlags();
-        if (flags & RC::Unreal::EObjectFlags::RF_BeginDestroyed) {
-            // Object is being destroyed, remove from tracking
+        // Check for destruction flags
+        if (it->second.flags & RC::Unreal::EObjectFlags::RF_BeginDestroyed) {
             liveObjects.erase(it);
             return false;
         }
@@ -149,39 +156,23 @@ public:
     /// @return true if the object was successfully added to tracking
     bool TrackSpecificObject(const RC::Unreal::UObjectBase* object) {
         if (!object) {
-            RC::Output::send<RC::LogLevel::Warning>(STR("Attempted to track null object pointer\n"));
-            return false;
-        }
-
-        auto uobject = std::bit_cast<RC::Unreal::UObject*>(object);
-        if (!uobject) {
-            RC::Output::send<RC::LogLevel::Warning>(STR("Failed to cast object for tracking\n"));
-            return false;
-        }
-
-        // Check if object is already being destroyed
-        auto flags = uobject->GetObjectFlags();
-        if (flags & RC::Unreal::EObjectFlags::RF_BeginDestroyed) {
-            RC::Output::send<RC::LogLevel::Warning>(STR("Attempted to track object that is pending destruction\n"));
             return false;
         }
 
         std::lock_guard lock(objectsLock);
-        
+    
         // Check if already tracking
         if (liveObjects.contains(object)) {
-            return true;  // Already tracking this object
+            return true;
         }
 
         ObjectInfo info;
         info.isValid = true;
-        info.name = uobject->GetName();
+        info.name = L"unknown";
         info.address = reinterpret_cast<uintptr_t>(object);
-        info.flags = flags;
+        info.flags = {}; 
 
         liveObjects[object] = info;
-        RC::Output::send<RC::LogLevel::Verbose>(STR("Started tracking specific object: {}\n"), 
-            info.name.c_str());
         return true;
     }
 
@@ -302,48 +293,56 @@ private:
     /// Listener for object creation events
     struct CreateListener : RC::Unreal::FUObjectCreateListener {
         /// Called when a new UObject is created
-        /// @param Object The newly created object
-        /// @param Index The object's index in the UObject array
         void NotifyUObjectCreated(const RC::Unreal::UObjectBase* Object, RC::Unreal::int32 Index) override {
-            auto& tracker = Get();
-            auto uobject = std::bit_cast<RC::Unreal::UObject*>(Object);
-            if (!uobject) return;
-
-            std::lock_guard lock(tracker.objectsLock);
+            if (!Object) return;
             
-            if (tracker.ShouldTrackObject(uobject)) {
+            try {
+                auto& tracker = Get();
+                std::unique_lock lock(tracker.objectsLock, std::try_to_lock);
+                if (!lock.owns_lock()) {
+                    return; // Skip this object if we can't get lock immediately
+                }
+                
+                // MINIMAL tracking - don't call any UObject methods yet
                 ObjectInfo info;
                 info.isValid = true;
-                info.name = uobject->GetName();
+                info.name = L"pending"; 
                 info.address = reinterpret_cast<uintptr_t>(Object);
-                info.flags = uobject->GetObjectFlags();
-
+                info.flags = {};       
+                
                 tracker.liveObjects[Object] = info;
+                
+            } catch (...) {
+                
             }
         }
 
-        /// Called when the UObject array is being shut down
         void OnUObjectArrayShutdown() override {
             RC::Unreal::UObjectArray::RemoveUObjectCreateListener(this);
         }
     };
 
-    /// Listener for object deletion events
+    /// Listener for object deletion events  
     struct DeleteListener : RC::Unreal::FUObjectDeleteListener {
-        /// Called when a UObject is being deleted
-        /// @param Object The object being deleted
-        /// @param Index The object's index in the UObject array
         void NotifyUObjectDeleted(const RC::Unreal::UObjectBase* Object, RC::Unreal::int32 Index) override {
-            auto& tracker = Get();
-            std::lock_guard lock(tracker.objectsLock);
+            if (!Object) return;
             
-            auto it = tracker.liveObjects.find(Object);
-            if (it != tracker.liveObjects.end()) {
-                tracker.liveObjects.erase(it);
+            try {
+                auto& tracker = Get();
+                
+                // Quick exit if we can't get the lock
+                std::unique_lock lock(tracker.objectsLock, std::try_to_lock);
+                if (!lock.owns_lock()) {
+                    return; // Skip cleanup if we can't get lock immediately
+                }
+                
+                tracker.liveObjects.erase(Object);
+                
+            } catch (...) {
+
             }
         }
 
-        /// Called when the UObject array is being shut down
         void OnUObjectArrayShutdown() override {
             RC::Unreal::UObjectArray::RemoveUObjectDeleteListener(this);
         }
