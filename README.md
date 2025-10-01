@@ -1,326 +1,252 @@
 # libvotv
 
-
 [![C++17](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](https://en.cppreference.com/w/cpp/17)
 [![CMake 3.18+](https://img.shields.io/badge/CMake-3.18+-green.svg)](https://cmake.org/)
 [![VotV pa0081_0008](https://img.shields.io/badge/VotV-pa0081__0008-orange.svg)](https://mrdrnose.itch.io/votvVoices_of_the_Void/)
-[![UE4SS](https://img.shields.io/badge/UE4SS-Required-red.svg)](https://docs.ue4ss.com/)
-[![Header Only](https://img.shields.io/badge/Header--Only-True-brightgreen.svg)]()
+[![Header Only](https://img.shields.io/badge/Header--Only-brightgreen.svg)]()
 
-A modern C++ header-only library for interacting with Voices of the Void game state, providing type-safe access to game objects, player state, and environment variables.
+Header-only C++ library for Voices of the Void modding. Type-safe game object access with memory safety utilities.
 
 ## Features
 
-- 🎮 Type-safe game state access through a single header
-- 🔒 Memory-safe field manipulation
-- 🎯 Direct access to core game systems
-- 🧰 Modern C++ wrapper around UE4/UE4SS objects
-- 📡 Object lifetime tracking utilities
-- 🔧 Struct manipulation macros for clean field access of custom fields
-
-### Todo
-
-- Map VotV specific functions with same method 
-
-## Table of Contents
-
-- [Prerequisites](#prerequisites)
-- [Version Compatibility](#version-compatibility)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Utility Classes](#utility-classes)
-- [API Reference](#api-reference)
-- [Examples](#examples)
-- [Contributing](#contributing)
-- [Credits](#credits)
+- Type-safe wrappers for game objects (Player, GameMode, Car, etc.)
+- Object lifetime tracking to prevent use-after-free
+- Utility functions for common modding patterns
+- Field access macros for custom UE4 structs
+- Hook parameter extraction helpers
 
 ## Prerequisites
 
-- CMake 3.18 or higher
-- [UE4SS C++ Dev Environment Setup](https://github.com/modestimpala/RE-UE4SS)
+- CMake 3.18+
+- [UE4SS C++ Dev Environment](https://github.com/modestimpala/RE-UE4SS)
+- Lib targets VotV 082c_0011
 
 ## Installation
 
-The library consists of three headers:
-- `game.hpp` - Main game state and objects
-- `ObjectLifetimeTracker.hpp` - UObject lifetime management
-- `StructUtil.hpp` - Field access macros and utilities
+### CMake
 
-### As a CMake Subproject
-
-1. Add the repository as a submodule:
 ```bash
 git submodule add https://github.com/modestimpala/libvotv.git extern/libvotv
 ```
 
-2. Add to your CMakeLists.txt:
 ```cmake
 add_subdirectory(extern/libvotv)
-target_link_libraries(your_project PRIVATE libvotv)
+target_link_libraries(your_mod PRIVATE libvotv)
 ```
 
-### Manual Installation / IDE Setup
+### Manual
 
-Since the library is header-only:
+Copy headers to your project and add to include path:
+- `game.hpp`
+- `StructUtil.hpp`
+- `ObjectLifetimeTracker.hpp`
+- `FunctionUtil.hpp`
+- `CommonUtil.hpp`
 
-1. Copy the three headers to your project
-2. Add their location to your include path
-3. Ensure UE4SS headers are available
+## Quick Start
 
-## Usage
-
-### Basic Setup
+### Game Objects (game.hpp)
 
 ```cpp
-#include <votv/game.hpp>  // Single header for all game functionality
-#include <votv/ObjectLifetimeTracker.hpp>
+class GameMode {
+    MainPlayer* mainPlayer;
+    SaveSlot* saveSlot;
+    DayNightCycle* daynightCycle;
+    float totalPower;
+    float usedPower;
+    bool isHalloween;
+    // ...
+    
+    PowerInfo GetPowerInfo() const;
+};
 
-using namespace votv::game;
+class MainPlayer {
+    bool underwater;
+    bool inWater;
+    bool dead;
+    float air;
+    float foodDrain;
+    float sleepDrain;
+    AActor* holdObject;
+    // ...
+    
+    PlayerState GetState() const;
+};
 
-// Get existing game mode from UE4SS
-GameMode* gameMode = /* get from UE4SS */;
-
-// Validate object is still alive
-auto& tracker = ObjectLifetimeTracker::Get();
-if (!tracker.IsActorAlive(gameMode)) return;
-
-// Access player
-MainPlayer* player = gameMode->mainPlayer;
-if (!tracker.IsActorAlive(player)) return;
-
-// Check player state
-if (player->inWater && player->air < 50.0f) {
-    // Handle low air situation
-}
+class DayNightCycle {
+    int32_t current_day() const;
+    float phase;
+    float rain;
+    bool isRaining;
+    // ...
+    
+    TimeInfo GetTimeInfo() const;
+    WeatherInfo GetWeatherInfo() const;
+};
 ```
 
-## Utility Classes
+See [game.hpp](include/votv/game.hpp) for complete API.
+
+## Utilities
 
 ### ObjectLifetimeTracker
 
-The `ObjectLifetimeTracker` provides safe UObject lifetime tracking.
-
-Initialize the ObjectLifetimeTracker as early as possible in your mod lifecycle:
+Prevents use-after-free by tracking UObject lifetimes.
 
 ```cpp
-auto on_unreal_init() -> void override
-    auto& tracker = ObjectLifetimeTracker::Get(); // Get instance early
-    // Rest of initialization...
-}
-```
-
-Early initialization ensures no objects created during startup are missed by the tracking system.
-
-Example:
-
-```cpp
-#include <ObjectLifetimeTracker.hpp>
-
-// Get singleton instance
 auto& tracker = ObjectLifetimeTracker::Get();
 
-// Track specific types
+// Track custom types
 tracker.RegisterTrackedType(Car::StaticClass());
-tracker.RegisterTrackedName(L"specialDoor");
+tracker.RegisterTrackedName(L"door");
 
-// Check if objects are still valid
+// Check validity
 if (tracker.IsActorAlive(someActor)) {
     // Safe to use
 }
+
+// Find tracked objects
+auto cars = tracker.FindObjectsByClass(Car::StaticClass());
 ```
 
-Features:
-- Default tracking of GameMode and MainPlayer objects
-- Registering custom types/names to track
-- Thread-safe operation
-- RAII-based resource management
-- Protection against use-after-free
+### FunctionUtil
 
-### StructUtil Macros
-
-`StructUtil.hpp` provides type-safe field access macros:
+Call Blueprint functions without boilerplate.
 
 ```cpp
-// Regular field access
-FIELD(0x0600, MainPlayer*, mainPlayer);  // Generates getters/setters
+auto* actor = /* get actor */;
+auto* func = FunctionUtil::FindFunction(actor, STR("SomeFunction"));
 
-// Vector field with component access
-VECTOR_INT_FIELD(0x02F8, timeZ);  // Adds _x, _y, _z component access
+// No parameters
+FunctionUtil::CallFunction(actor, func);
 
-// Enum field with type safety
-ENUM_FIELD(0x01E1, GameModes::Type, gamemodeType);
+// Single parameter
+FunctionUtil::CallFunction(actor, func, {{"Name", username}});
 
-// Bit field for flags
-BIT_FIELD(0x0480, 0x01, someFlag);
+// Multiple parameters
+FunctionUtil::CallFunction(actor, func, {
+    {"Name", username},
+    {"Message", message}
+});
 
-// Array field access
-ARRAY_FIELD(0x0208, RC::Unreal::TArray<float>, scores);
+// With return value
+bool result;
+FunctionUtil::CallFunction(actor, func, {{"Name", username}}, &result);
 ```
 
-Features:
-- Automatic getter/setter generation
-- Type-safe field access
-- Support for vectors, enums, arrays and bit fields
-- Property syntax support through __declspec
-- All methods marked noexcept where appropriate
-- Proper reference handling (lvalue/rvalue)
-
-## API Reference
-
-### Core Game Classes (game.hpp)
-
-All game functionality is contained in a single header under the `votv::game` namespace. 
+### CommonUtil
 
 ```cpp
-namespace votv::game {
-    class GameMode;
-    class MainPlayer;
-    class DayNightCycle;
-    class Car;
-    class Door;
-    class KerfurOmega;
-    class GameInst;
-    class SaveSlot;
-}
+// String conversion
+auto wide = StringConv::ToWide("hello");
+auto narrow = StringConv::ToNarrow(L"hello");
 
-PowerInfo GetPowerInfo() const;  // Get complete power system state
-TimeInfo GetTimeInfo() const; // Get complete time info
-WeatherInfo GetWeatherInfo() const; // Get complete weather info
+// Color utilities
+auto color = Color::FromHex("#FF5733");
+uint32_t bgra = color.ToPackedBGRA();
 
-// Game Instance
-class GameInst : public RC::Unreal::UObject {
-    SaveSlot* save;             // Active save
-    GameModes::Type gamemodeType; // Game mode Type (Sandbox, Story, etc)
-    bool opened;                // Instance opened
-    int32_t startDay;           // Starting day
-    ...
-};
+// Async worker
+AsyncWorker worker;
+worker.queue_task([&]() {
+    // Background task
+});
 
-// Save slot
-class SaveSlot : public RC::Unreal::UObject {
-    float food;                 // Food level
-    float sleep;                // Sleep level
-    int32_t Points;             // Money
-    float health;               // Current health
-    ...
-};
+// Safe parameter allocation (RAII)
+ParamGuard params(function->GetParmsSize());
+if (!params) return false;
+// Automatically freed on scope exit
 
-```
-
-See header file for complete API.
-
-## Examples
-
-### Safe Object Access Pattern
-
-```cpp
-#include <votv/game.hpp>
-#include <votv/ObjectLifetimeTracker.hpp>
-
-void SafeGameObjectAccess(votv::game::GameMode* gameMode) {
-    auto& tracker = ObjectLifetimeTracker::Get();
-    
-    // Validate game mode
-    if (!tracker.IsActorAlive(gameMode)) return;
-
-    // Access and validate player
-    auto* player = gameMode->mainPlayer;
-    if (!tracker.IsActorAlive(player)) return;
-
-    // Safe to use objects
-    auto state = player->GetState();
-    auto power = gameMode->GetPowerInfo();
-
-    if (state.inWater && power.ratio < 0.2f) {
-        // Handle dangerous situation
-    }
+// Hook parameter extraction
+auto username = HookUtil::ExtractParamAsString(ctx, STR("Chatter"));
+if (username) {
+    // Use *username
 }
 ```
 
-### Custom Object Tracking
+## Custom Fields
+
+Map UE4SS header dump offsets to C++ classes:
+
+1. Generate headers with UE4SS dumper (enable DumpOffsetsAndSizes)
+2. Find your class in dumps
+3. Map fields using macros
 
 ```cpp
-#include <votv/game.hpp>
-#include <votv/ObjectLifetimeTracker.hpp>
-
-void SetupTracking() {
-    auto& tracker = ObjectLifetimeTracker::Get();
-
-    // Track all cars
-    tracker.RegisterTrackedType(Car::StaticClass());
-
-    // Track special objects
-    tracker.RegisterTrackedName(L"prop_important");
-
-    // Later cleanup if needed
-    tracker.UnregisterTrackedType(Car::StaticClass());
-    tracker.UnregisterTrackedName(L"prop_important");
-}
-```
-
-### Time and Weather Management
-
-```cpp
-#include <votv/game.hpp>
-
-void HandleTimeChange(DayNightCycle* dnc) {
-    // Get complete time state
-    auto timeInfo = dnc->GetTimeInfo();
-    auto weather = dnc->GetWeatherInfo();
-    
-
-    // Access raw day counter
-    int32_t currentDay = dnc->current_day();
-    
-    // Modify time
-    dnc->set_timeZ(0, 0, currentDay + 1); 
-}
-```
-
-## Defining Custom Fields from UE4SS Header Dumps
-
-See [UE4SS Dumpers](https://docs.ue4ss.com/dev/feature-overview/dumpers.html#c-header-generator)
-
-See [UE4SS Dumper Converter](https://github.com/modestimpala/RE-UE4SS/blob/main/DumpConverter.md)
-
-Make sure DumpOffsetsAndSizes and LoadAllAssetsBeforeGeneratingCXXHeaders are 1 then dump headers from main menu.
-
-Find specific class, then map offsets:
-
-
-```cpp
-// Dumped cremator.hpp
-class Acremator_C : public Aactor_save_C
-{
-    ...
-    bool IsClosed;                                                                    // 0x0351 (size: 0x1)
-    ...
-}
+// From UE4SS dump: Acremator_C
+// bool IsClosed; // 0x0351 (size: 0x1)
 
 #include <votv/game.hpp>
 #include <StructUtil.hpp>
 
-// Your custom wrapper class (e.g., extra_game.hpp)
 class Cremator : public RC::Unreal::AActor {
 public:
-    FIELD(0x0351, bool, isClosed);    // Maps to IsClosed from dump
+    UE4SS_FIELD(bool, isClosed);  // Generates getter/setter
 };
 ```
 
-And so on for any other custom fields needed.
+Available macros:
+- `UE4SS_FIELD(type, name)` - Basic field
+- `UE4SS_FIELD_PTR(type, name)` - Pointer field
+- `UE4SS_VECTOR_FIELD(name)` - FVector field
+- `UE4SS_INT_VECTOR_FIELD(name)` - FIntVector with component access
+- `UE4SS_ENUM_FIELD(enum, name)` - Enum field
+
+See [UE4SS Dumpers](https://docs.ue4ss.com/dev/feature-overview/dumpers.html) for dump generation.
+
+## Examples
+
+### Safe Object Pattern
+
+```cpp
+void DoSomething(GameMode* gm) {
+    auto& tracker = ObjectLifetimeTracker::Get();
+    
+    if (!tracker.IsActorAlive(gm)) return;
+    if (!tracker.IsActorAlive(gm->mainPlayer)) return;
+    
+    // Safe to use both objects
+    auto state = gm->mainPlayer->GetState();
+    auto power = gm->GetPowerInfo();
+}
+```
+
+### Calling Blueprint Functions
+
+```cpp
+auto* func = FunctionUtil::FindFunction(actor, STR("TwitchChat"));
+if (!func) return;
+
+FunctionUtil::CallFunction(actor, func, {
+    {"Name", StringConv::ToWide(username)},
+    {"Message", StringConv::ToWide(message)}
+});
+```
+
+### Hook with Parameter Extraction
+
+```cpp
+UObjectGlobals::RegisterHook(
+    STR("/Game/Path/To/Function"),
+    [](auto& ctx, void*) {}, // pre
+    [](auto& ctx, void*) {   // post
+        if (auto name = HookUtil::ExtractParamAsString(ctx, STR("Chatter"))) {
+            // Use *name
+        }
+    },
+    nullptr
+);
+```
 
 ## Contributing
 
-1. Fork the repository
-2. Create your feature branch (git checkout -b feature/extra-offsets)
-3. Commit your changes (git commit -m 'More offsets')
-4. Push to the branch (git push origin feature/extra-offsets)
-5. Open a Pull Request
-
+Submit PRs for:
+- Additional game object mappings
+- Offset updates for new game versions
+- Utility function improvements
+- Bug fixes
 
 ## Credits
 
-- MrDrNose for VotV
+- MrDrNose - VotV
 - UE4SS and their Discord Community
 - agersant (gbvsr-frame-meter)
-
