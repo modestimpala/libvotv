@@ -2,7 +2,7 @@
 
 [![C++17](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](https://en.cppreference.com/w/cpp/17)
 [![CMake 3.18+](https://img.shields.io/badge/CMake-3.18+-green.svg)](https://cmake.org/)
-[![VotV pa0081_0008](https://img.shields.io/badge/VotV-pa0081__0008-orange.svg)](https://mrdrnose.itch.io/votvVoices_of_the_Void/)
+[![VotV 0.9.0](https://img.shields.io/badge/VotV-0.9.0-orange.svg)](https://mrdrnose.itch.io/votvVoices_of_the_Void/)
 [![Header Only](https://img.shields.io/badge/Header--Only-brightgreen.svg)]()
 
 Header-only C++ library for Voices of the Void modding. Type-safe game object access with memory safety utilities.
@@ -19,7 +19,7 @@ Header-only C++ library for Voices of the Void modding. Type-safe game object ac
 
 - CMake 3.18+
 - [UE4SS C++ Dev Environment](https://github.com/modestimpala/RE-UE4SS)
-- Lib targets VotV 082c_0011
+- Lib targets VotV 0.9.0
 
 ## Installation
 
@@ -61,15 +61,15 @@ class GameMode {
 };
 
 class MainPlayer {
-    bool underwater;
+    bool underwaterPlayer;
     bool inWater;
     bool dead;
     float air;
     float foodDrain;
     float sleepDrain;
-    AActor* holdObject;
+    AActor* holding_actor;
     // ...
-    
+
     PlayerState GetState() const;
 };
 
@@ -85,7 +85,11 @@ class DayNightCycle {
 };
 ```
 
-See [game.hpp](include/votv/game.hpp) for complete API.
+Also includes: `ATV`, `Bed`, `Grime`, `GrowingPlant`, `ServerBox`, `SitBox`, `Padlock`, `ToolGun`, `VidCam`, `Workbench`, `ATM`, `SleepingBag`, `Whiteboard`
+
+Enums: `GameModes`, `Seasons`, `ToolCategories`, `FarmPlantTypes`, `PhotographicTypes`, `HotkeyActions`, `TrashTypes`, `PhysicalModules`
+
+See [game.hpp](include/game.hpp) for complete API.
 
 ## Utilities
 
