@@ -1,4 +1,5 @@
 #pragma once
+#include "AGameMode.hpp"
 #include "StructUtil.hpp"
 
 namespace votv::game {
@@ -13,6 +14,7 @@ namespace votv::game {
     class DayNightCycle;
     class GameInstance;
     class GameMode;
+    class ATV;
     class Prop_Hook;
     class Bed;
     class Grime;
@@ -177,7 +179,7 @@ namespace votv::game {
         // Player state fields
         UE4SS_FIELD(float, sleepTime);
         UE4SS_FIELD(bool, hasVirus);
-        UE4SS_FIELD(bool, isSleeping);
+        UE4SS_FIELD(bool, isSleep);
         UE4SS_FIELD(bool, isDreaming);
         UE4SS_FIELD(bool, IsFlying);
         UE4SS_FIELD(bool, isInMainMenu);
@@ -209,6 +211,19 @@ namespace votv::game {
         UE4SS_FIELD(bool, isInGayBabyJail);
         UE4SS_FIELD(bool, unlockFungunsInStory);
         UE4SS_FIELD(int32_t, tps);
+
+        // Events & state
+        UE4SS_FIELD(bool, apoc);
+        UE4SS_FIELD(bool, arirFeeding);
+        UE4SS_FIELD(bool, isChristmas);
+        UE4SS_FIELD(bool, editor);
+        UE4SS_FIELD(int32_t, activeEvents);
+
+        // Entity pointers (non-null = event active)
+        UE4SS_FIELD(AActor*, evil);
+        UE4SS_FIELD(AActor*, blackFog);
+        UE4SS_FIELD(AActor*, redSky);
+        UE4SS_FIELD(AActor*, badSun);
 
         // Power system fields
         UE4SS_FIELD(float, powerCalculating);
@@ -271,6 +286,7 @@ namespace votv::game {
         UE4SS_FIELD(UObject*, sitOnComponent);
         UE4SS_FIELD(UObject*, sitPlace);
         UE4SS_FIELD(AActor*, lookAtActor);
+        UE4SS_FIELD(ATV*, atv);  // non-null when driving ATV
 
         UE4SS_FIELD(float, animTimer);
         UE4SS_FIELD(float, defSpeed);
@@ -326,6 +342,14 @@ namespace votv::game {
         UE4SS_FIELD(bool, deactivateHeightRagdoll);
         UE4SS_FIELD(bool, velmaMode);
         UE4SS_FIELD(bool, crankFlashlight);
+
+        // Equipment & status
+        UE4SS_FIELD(float, irradiation);
+        UE4SS_FIELD(int32_t, scuba);
+        UE4SS_FIELD(AActor*, cig);
+        UE4SS_FIELD(bool, equipped_emf);
+        UE4SS_FIELD(bool, equipped_geiger);
+        UE4SS_FIELD(bool, equipped_krampushat);
 
         // New fields (0.9.0)
         UE4SS_FIELD(float, sleepComfort);
@@ -553,6 +577,13 @@ namespace votv::game {
         UE4SS_FIELD(float, Day);
         UE4SS_FIELD(float, maxHealth);
         UE4SS_FIELD(int32_t, totalCompletedTaskParts); // was: completes
+
+        // Additional stats
+        UE4SS_FIELD(float, arirReputation);
+        UE4SS_FIELD(float, coffeePower);
+        UE4SS_FIELD(bool, hasFailedWeek);
+        UE4SS_FIELD(float, moonPhase);
+        UE4SS_FIELD(float, battery);
     };
 
 
