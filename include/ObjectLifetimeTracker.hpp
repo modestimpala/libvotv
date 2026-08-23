@@ -2,7 +2,9 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <mutex>
+#include <atomic>
 #include <DynamicOutput/Output.hpp>
+#include <Unreal/FWeakObjectPtr.hpp>
 #include <Unreal/UObjectArray.hpp>
 #include <Unreal/UObject.hpp>
 #include <Unreal/AActor.hpp>
@@ -15,6 +17,55 @@ namespace RC::Unreal {
     class UObject;
     class AActor;
     class AGameModeBase;
+}
+
+/// Give a UObject a serial number if it does not have one, so that an
+/// FWeakObjectPtr captured from it can actually resolve.
+///
+/// UE4SS's FWeakObjectPtr::operator= is NOT the engine's:
+///
+///     engine   ObjectSerialNumber = GUObjectArray.AllocateSerialNumber(Index);
+///     UE4SS    ObjectSerialNumber = IndexToObject(Index)->GetSerialNumber();
+///
+/// The engine's ALLOCATES lazily. UE4SS's only READS, and the field is zeroed
+/// by FUObjectArray::AllocateUObjectIndex and stays zero until something takes
+/// a weak pointer -- while Get() early-returns null for any handle whose stored
+/// serial is zero. So a handle captured from an object nothing has
+/// weak-referenced yet NEVER resolves, and IsActorAlive answers "dead" for it
+/// forever.
+///
+/// That is not a corner case here: TrackSpecificObject exists precisely for
+/// objects a caller means to hold, and it is usually called the moment the
+/// object appears. Without this, every explicitly tracked object reads dead
+/// forever, silently breaking any logic downstream that depends on it
+/// actually being alive.
+///
+/// So do what the engine does: stamp a serial when the slot has none, with the
+/// same compare-from-zero, so a concurrent engine allocation wins and we adopt
+/// its number rather than overwriting it. The values come from a private high
+/// range rather than FUObjectArray::MasterSerialNumber -- that counter is one
+/// more offset to be wrong about, and the only property a serial needs is that
+/// a recycled slot never sees its previous value, which FreeUObjectIndex
+/// guarantees by zeroing the field.
+inline void EnsureUObjectSerialNumber(const RC::Unreal::UObjectBase* object) {
+    using namespace RC::Unreal;
+    if (!object) return;
+
+    auto* obj = const_cast<UObject*>(std::bit_cast<const UObject*>(object));
+    const int32_t index = obj->GetInternalIndex();
+    if (index < 0) return;
+    FUObjectItem* item = FUObjectArray::IndexToObject(index);
+    if (!item) return;
+
+    int32_t* slot = &item->GetSerialNumber();
+    if (*slot != 0) return; // the engine already allocated one
+
+    // High enough that the engine's counter -- which starts at 1000 and
+    // increments once per first-ever weak reference -- cannot reach us.
+    static std::atomic<int32_t> next{0x40000000};
+    int32_t expected = 0;
+    std::atomic_ref<int32_t>(*slot).compare_exchange_strong(
+        expected, next.fetch_add(1, std::memory_order_relaxed));
 }
 
 /// ObjectLifetimeTracker provides RAII-style lifetime tracking for UObjects with additional state monitoring
@@ -32,6 +83,12 @@ namespace RC::Unreal {
 /// - Object name
 /// - Memory address
 /// - Object flags
+///
+/// WHAT IT CANNOT TELL YOU. Everything here is keyed on the object's ADDRESS,
+/// and addresses are reused. "Is something alive at X" and "is X still the
+/// object I stored" are different questions, and only the first one is
+/// answerable from a map like this one. A caller that keeps a UObject* across
+/// frames needs an FWeakObjectPtr captured alongside it; see IsActorAlive.
 ///
 /// Example usage:
 /// @code
@@ -56,6 +113,13 @@ public:
         std::wstring name;            ///< The object's name
         uintptr_t address{0};         ///< Memory address of the object
         RC::Unreal::EObjectFlags flags{}; ///< Current object flags
+        /// Set by TrackSpecificObject, which is the only context where taking
+        /// one is safe: the caller is on the game thread and holds a pointer it
+        /// knows is live. The create listener deliberately does NOT take one --
+        /// it fires from inside a GUObjectArray notification, and allocating a
+        /// serial number there is GUObjectArray work under GUObjectArray work.
+        RC::Unreal::FWeakObjectPtr weak{};
+        bool hasWeak{false};
     };
 
     /// Get the singleton instance of ObjectLifetimeTracker
@@ -65,36 +129,73 @@ public:
     }
 
 
-    /// Check if a UObject pointer is still valid and not pending destruction
+    /// Is there a live object AT THIS ADDRESS?
+    ///
+    /// Read that sentence literally, because it is not the question most
+    /// callers mean. This class is keyed on the address, and the create
+    /// listener marks every newly constructed UObject valid -- so once an actor
+    /// dies and something else is allocated into its slot, this returns true
+    /// again for a pointer whose original object is long gone. It is answering
+    /// honestly; the pointer is just no longer evidence of what the caller
+    /// thinks it is.
+    ///
+    /// If you are holding a UObject* across frames, this is NOT enough. Pair
+    /// the pointer with an FWeakObjectPtr captured when you stored it, and
+    /// compare against it before trusting the raw pointer again.
+    ///
     /// @param actor The UObject to check
-    /// @return true if the object is being tracked, valid, and not marked for destruction
+    /// @return true if an object is live at this address
     bool IsActorAlive(const RC::Unreal::UObjectBase* actor) {
         if (!actor) return false;
-    
-        std::lock_guard lock(objectsLock);
-        auto it = liveObjects.find(actor);
-        if (it == liveObjects.end()) return false;
 
-        // Update info if it's still "pending"
-        if (it->second.name == L"pending") {
-            try {
-                auto uobject = std::bit_cast<RC::Unreal::UObject*>(actor);
-                if (uobject) {
-                    it->second.name = uobject->GetName();
-                    it->second.flags = uobject->GetObjectFlags();
-                }
-            } catch (...) {
-                // If we can't update, just return what we know
-            }
+        // NOTHING that touches the UObject may run under objectsLock. The
+        // deletion listener blocks on this lock, and it is called from
+        // GUObjectArray during purge while that holds its own internal lock;
+        // GetName walks an outer chain and can reach back into GUObjectArray,
+        // which would be a lock-order inversion and a hang at GC time.
+        RC::Unreal::FWeakObjectPtr weak{};
+        bool hasWeak = false;
+        {
+            std::lock_guard lock(objectsLock);
+            auto it = liveObjects.find(actor);
+            if (it == liveObjects.end()) return false;
+            if (!it->second.isValid) return false;
+            weak = it->second.weak;
+            hasWeak = it->second.hasWeak;
         }
 
-        // Check for destruction flags
-        if (it->second.flags & RC::Unreal::EObjectFlags::RF_BeginDestroyed) {
-            liveObjects.erase(it);
-            return false;
+        // `actor` itself must never be dereferenced here. Between the map
+        // lookup and any read of the object, GC on another thread can free
+        // it, so touching it here would fault on exactly the input this
+        // check exists to reject.
+        //
+        // FWeakObjectPtr::Get() resolves through GUObjectArray by index and
+        // rejects PendingKill and Unreachable without touching object memory
+        // at all, so it is both safer and stronger than a flags check.
+        if (hasWeak) {
+            return static_cast<const void*>(weak.Get()) == static_cast<const void*>(actor);
         }
 
-        return it->second.isValid;
+        // Create-listener-only entry: nobody ever asked us to hold this one, so
+        // there is no handle to resolve. The map is the whole answer, which is
+        // what it was for these objects before as well -- the RF_BeginDestroyed
+        // branch never ran on them either, because their flags were never
+        // populated.
+        return true;
+    }
+
+    /// How often a create/delete notification had to WAIT for the lock instead
+    /// of taking it uncontended. Both listeners block rather than give up,
+    /// because a dropped deletion would leave an entry reading isValid==true
+    /// forever, and IsActorAlive would keep vouching for freed memory.
+    /// Nonzero counts are expected under GC load, not a sign of a bug.
+    struct Contention {
+        unsigned long long creates{0};
+        unsigned long long deletes{0};
+    };
+    Contention GetContention() const {
+        return {contendedCreates.load(std::memory_order_relaxed),
+                contendedDeletes.load(std::memory_order_relaxed)};
     }
 
     /// Register a UClass to be tracked by the lifetime system
@@ -152,6 +253,12 @@ public:
     }
 
     /// Explicitly track a specific UObject instance
+    ///
+    /// This is where the weak handle comes from, so it is what makes
+    /// IsActorAlive meaningful for this object: the caller is on the game
+    /// thread and holds a pointer it knows is live, which is the only context
+    /// in which capturing one is safe.
+    ///
     /// @param object The UObject pointer to track
     /// @return true if the object was successfully added to tracking
     bool TrackSpecificObject(const RC::Unreal::UObjectBase* object) {
@@ -159,20 +266,43 @@ public:
             return false;
         }
 
-        std::lock_guard lock(objectsLock);
-    
-        // Check if already tracking
-        if (liveObjects.contains(object)) {
-            return true;
+        // Outside the lock, because both of these walk GUObjectArray and
+        // objectsLock is held by the delete listener while GUObjectArray
+        // purges. Same lock-order rule as IsActorAlive.
+        RC::Unreal::FWeakObjectPtr weak{};
+        bool hasWeak = false;
+        try {
+            // Must come FIRST. Without it the handle below is captured with
+            // serial 0 and can never resolve, which makes IsActorAlive answer
+            // "dead" for exactly the objects a caller cared enough to track.
+            EnsureUObjectSerialNumber(object);
+            weak = std::bit_cast<RC::Unreal::UObject*>(object);
+            hasWeak = true;
+            // Deliberately NOT verified against a resolve here. Once the serial
+            // is stamped, a handle that fails to resolve is the engine saying
+            // the object is already PendingKill or Unreachable -- a correct
+            // answer, and one we want IsActorAlive to keep giving. Falling back
+            // to address-only on that would turn a dying object back into a
+            // live one, which is the direction that hurts.
+        } catch (...) {
+            // Leaves the entry address-only; still usable, just without the
+            // stronger resolve check.
         }
 
-        ObjectInfo info;
-        info.isValid = true;
-        info.name = L"unknown";
-        info.address = reinterpret_cast<uintptr_t>(object);
-        info.flags = {}; 
+        std::lock_guard lock(objectsLock);
 
-        liveObjects[object] = info;
+        // Not an early return on "already tracking": the create listener has
+        // already inserted every object into the map by the time a caller
+        // gets here, so bailing out on that check would mean this call never
+        // actually attaches a handle. Upgrade the existing entry in place.
+        auto& info = liveObjects[object];
+        info.isValid = true;
+        if (info.name.empty()) info.name = L"pending";
+        info.address = reinterpret_cast<uintptr_t>(object);
+        if (hasWeak && !info.hasWeak) {
+            info.weak = weak;
+            info.hasWeak = true;
+        }
         return true;
     }
 
@@ -241,6 +371,22 @@ private:
     std::unordered_set<RC::Unreal::UClass*> trackedTypes;
     std::unordered_set<std::wstring> trackedNames;
     std::mutex objectsLock;
+    std::atomic<unsigned long long> contendedCreates{0};
+    std::atomic<unsigned long long> contendedDeletes{0};
+
+    /// Take objectsLock, counting the case where it was already held.
+    /// Deliberately blocking: see Contention. The lock is never held across
+    /// anything that can create or destroy a UObject, so this cannot deadlock
+    /// against the notification it is protecting.
+    template <typename Counter>
+    static std::unique_lock<std::mutex> LockCounting(std::mutex& m, Counter& counter) {
+        std::unique_lock<std::mutex> lock(m, std::try_to_lock);
+        if (!lock.owns_lock()) {
+            counter.fetch_add(1, std::memory_order_relaxed);
+            lock.lock();
+        }
+        return lock;
+    }
 
     /// Constructor sets up object creation and deletion listeners
     ObjectLifetimeTracker() {
@@ -298,12 +444,14 @@ private:
             
             try {
                 auto& tracker = Get();
-                std::unique_lock lock(tracker.objectsLock, std::try_to_lock);
-                if (!lock.owns_lock()) {
-                    return; // Skip this object if we can't get lock immediately
-                }
-                
+                // Blocking, for symmetry with the deletion listener: a dropped
+                // creation at an address a dropped deletion also missed is the
+                // combination that resurrects a freed pointer.
+                auto lock = LockCounting(tracker.objectsLock, tracker.contendedCreates);
+
                 // MINIMAL tracking - don't call any UObject methods yet
+                // (the object is not fully constructed here, which is why
+                // ShouldTrackObject cannot be consulted from this callback).
                 ObjectInfo info;
                 info.isValid = true;
                 info.name = L"pending"; 
@@ -329,13 +477,16 @@ private:
             
             try {
                 auto& tracker = Get();
-                
-                // Quick exit if we can't get the lock
-                std::unique_lock lock(tracker.objectsLock, std::try_to_lock);
-                if (!lock.owns_lock()) {
-                    return; // Skip cleanup if we can't get lock immediately
-                }
-                
+
+                // NEVER give up on a deletion. A dropped one is the single
+                // failure this class cannot absorb: the entry survives with
+                // isValid==true, IsActorAlive keeps vouching for the address,
+                // and a caller ends up dereferencing freed memory. Deletions
+                // arrive on FAsyncPurge while the game thread can simultaneously
+                // be inside IsActorAlive on the same lock, so this is a race
+                // that happens under normal GC load, not an edge case.
+                auto lock = LockCounting(tracker.objectsLock, tracker.contendedDeletes);
+
                 tracker.liveObjects.erase(Object);
                 
             } catch (...) {
